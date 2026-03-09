@@ -104,8 +104,11 @@ class HostelApp(ctk.CTk):
         self.btn_allocations = ctk.CTkButton(self.sidebar_frame, text="Allocate Room", command=lambda: self.select_frame("allocations"))
         self.btn_allocations.grid(row=3, column=0, padx=20, pady=10)
 
-        self.btn_view = ctk.CTkButton(self.sidebar_frame, text="View All", command=lambda: self.select_frame("view"))
+        self.btn_view = ctk.CTkButton(self.sidebar_frame, text="View Allocations", command=lambda: self.select_frame("view"))
         self.btn_view.grid(row=4, column=0, padx=20, pady=10)
+
+        self.btn_view_rooms = ctk.CTkButton(self.sidebar_frame, text="View Rooms", command=lambda: self.select_frame("view_rooms"))
+        self.btn_view_rooms.grid(row=5, column=0, padx=20, pady=10)
 
         self.appearance_mode_label = ctk.CTkLabel(self.sidebar_frame, text="Appearance Mode:", anchor="w")
         self.appearance_mode_label.grid(row=6, column=0, padx=20, pady=(10, 0))
@@ -124,12 +127,14 @@ class HostelApp(ctk.CTk):
         self.f_students = self.build_students_frame()
         self.f_allocations = self.build_allocations_frame()
         self.f_view = self.build_view_frame()
+        self.f_view_rooms = self.build_rooms_view_frame()
 
         self.frames = {
             "rooms": self.f_rooms,
             "students": self.f_students,
             "allocations": self.f_allocations,
-            "view": self.f_view
+            "view": self.f_view,
+            "view_rooms": self.f_view_rooms
         }
 
         # Select default
@@ -145,6 +150,8 @@ class HostelApp(ctk.CTk):
         self.frames[name].grid(row=0, column=0, sticky="nsew")
         if name == "view":
             self.refresh_view()
+        elif name == "view_rooms":
+            self.refresh_rooms_view()
         elif name == "allocations":
             self.refresh_allocations_dropdowns()
 
@@ -269,6 +276,37 @@ class HostelApp(ctk.CTk):
         scrollbar.pack(side="right", fill="y")
         
         ctk.CTkButton(f, text="Refresh Data", command=self.refresh_view).pack(pady=10)
+
+        return f
+
+    def build_rooms_view_frame(self):
+        f = ctk.CTkFrame(self.main_frame, corner_radius=10)
+        
+        lbl = ctk.CTkLabel(f, text="Rooms Overview", font=ctk.CTkFont(size=20, weight="bold"))
+        lbl.pack(pady=10)
+        
+        tree_frame = ctk.CTkFrame(f)
+        tree_frame.pack(expand=True, fill="both", padx=20, pady=20)
+
+        columns = ("room_number", "capacity", "occupancy", "available")
+        self.rooms_tree = ttk.Treeview(tree_frame, columns=columns, show="headings", height=15)
+        self.rooms_tree.heading("room_number", text="Room No")
+        self.rooms_tree.heading("capacity", text="Max Capacity")
+        self.rooms_tree.heading("occupancy", text="Occupancy")
+        self.rooms_tree.heading("available", text="Available Spots")
+        
+        self.rooms_tree.column("room_number", width=100, anchor=tk.CENTER)
+        self.rooms_tree.column("capacity", width=120, anchor=tk.CENTER)
+        self.rooms_tree.column("occupancy", width=120, anchor=tk.CENTER)
+        self.rooms_tree.column("available", width=150, anchor=tk.CENTER)
+
+        scrollbar = ttk.Scrollbar(tree_frame, orient="vertical", command=self.rooms_tree.yview)
+        self.rooms_tree.configure(yscrollcommand=scrollbar.set)
+        
+        self.rooms_tree.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        ctk.CTkButton(f, text="Refresh Data", command=self.refresh_rooms_view).pack(pady=10)
 
         return f
 
@@ -399,6 +437,27 @@ class HostelApp(ctk.CTk):
             
             for row in cursor.fetchall():
                 self.tree.insert("", tk.END, values=row)
+                
+        except Error as e:
+            messagebox.showerror("Database Error", str(e))
+        finally:
+            if 'conn' in locals() and conn and conn.is_connected():
+                conn.close()
+
+    def refresh_rooms_view(self):
+        for item in self.rooms_tree.get_children():
+            self.rooms_tree.delete(item)
+            
+        try:
+            conn = get_connection()
+            if not conn: return
+            cursor = conn.cursor()
+            query = "SELECT room_number, capacity, occupancy FROM rooms ORDER BY room_number"
+            cursor.execute(query)
+            
+            for (room_no, cap, occ) in cursor.fetchall():
+                available = cap - occ
+                self.rooms_tree.insert("", tk.END, values=(room_no, cap, occ, available))
                 
         except Error as e:
             messagebox.showerror("Database Error", str(e))
